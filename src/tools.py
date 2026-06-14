@@ -67,8 +67,44 @@ def create_calculator_tool(logger: ToolLogger):
     """
     Creates a calculator tool - TO BE IMPLEMENTED
     """
+
     # Your implementation here
-    pass
+    @tool
+    def calculator(expression: str) -> str:
+        """Evaluate a mathematical expression and return the result.
+        Use this tool for ALL calculations, no matter how simple.
+        Args:
+            expression: A math expression like '100 + 200' or '50000 * 1.1'
+        """
+        try:
+            # 1 validate epxression for safety
+            if not re.match(r"^[\d\s\+\-\*\/\(\)\.]+$", expression):
+                return (
+                    "Error: Invalid characters in expression. Only basic math allowed."
+                )
+
+            # 2 Evaluates the expression using Python's eval() funtion
+            result = eval(expression)
+
+            # 3 logs the tool usage with ToolLogger
+            logger.log_tool_use(
+                "calculator", {"expression": expression}, {"result": result}
+            )
+
+            # 4 returns a formatted result string
+            return f"Result: {expression} = {result}"
+
+            # 5 Handles errors gracefully
+        except Exception as e:
+            error_msg = f"Error calculating: {str(e)}"
+            logger.log_tool_use(
+                "calculator",
+                {"expression": expression},
+                {"error": error_msg},
+            )
+            return error_msg
+
+    return calculator
 
 
 def create_document_search_tool(retriever, logger: ToolLogger):
