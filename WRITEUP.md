@@ -35,7 +35,7 @@ Each agent runs via `invoke_react_agent`, which creates a `create_react_agent` i
 | Field                  | Type                              | Role                                         |
 | ---------------------- | --------------------------------- | -------------------------------------------- |
 | `user_input`           | `str`                             | Raw user message for this turn               |
-| `messages`             | `List[BaseMessage]` (append-only) | Full LangChain message history               |
+| `messages`             | `List[BaseMessage]`               | Full LangChain message history               |
 | `intent`               | `UserIntent`                      | Classification result from `classify_intent` |
 | `next_step`            | `str`                             | Routing signal read by `should_continue`     |
 | `conversation_summary` | `str`                             | Rolling summary of prior turns               |
@@ -44,7 +44,7 @@ Each agent runs via `invoke_react_agent`, which creates a `create_react_agent` i
 | `tools_used`           | `List[str]`                       | Names of tools called this turn              |
 | `actions_taken`        | `List[str]`                       | Audit log of nodes visited this turn         |
 
-The `messages` field uses LangGraph's `add_messages` reducer, so nodes add new messages rather than replacing the list.
+The `actions_taken` field uses an `operator.add` reducer, so each node appends its name to the list rather than replacing it.
 
 ### Cross-turn persistence: `InMemorySaver` checkpointer
 
