@@ -101,26 +101,20 @@ Each agent passes a schema class as `response_format` to `create_react_agent`. T
 
 ## Example Conversations
 
-The following examples show all three intent paths. Output lines beginning with `>` are assistant responses; metadata labels (INTENT, TOOLS USED, SOURCES) are printed by the CLI.
+The following examples show all three intent paths. Metadata labels (INTENT, TOOLS USED, CONVERSATION SUMMARY) are printed by the CLI after each response.
 
 ---
 
 ### Example 1 — Q&A: Specific document lookup
 
 ```
-Enter Message: What is the total amount due on invoice INV-002?
+Enter Message: what are the payment terms on invoice INV-001
+
+The payment terms on invoice INV-001 are "Net 30 days."
 
 INTENT: qa
 TOOLS USED: document_reader
-SOURCES: INV-002
-
-> Invoice INV-002 (Invoice #12346, client TechStart Inc., dated 2024-02-20)
-> has a total due of $69,300. This reflects a subtotal of $70,000,
-> a 10% discount of -$7,000, and 10% tax of $6,300.
-> Payment terms are Net 45 days.
-
-CONVERSATION SUMMARY: User asked about the total amount on INV-002.
-  The invoice for TechStart Inc. totals $69,300 after discount and tax.
+CONVERSATION SUMMARY: The payment terms on invoice INV-001 are "Net 30 days."
 ```
 
 ---
@@ -128,28 +122,29 @@ CONVERSATION SUMMARY: User asked about the total amount on INV-002.
 ### Example 2 — Summarization: Summarize all contracts
 
 ```
-Enter Message: Summarize all contracts in the system.
+Enter Message: summarize all contracts in the system
+
+### Summary of Contract CON-001
+
+- **Title:** Service Agreement
+- **Parties Involved:**
+  - **Provider:** DocDacity Solutions Inc.
+  - **Client:** Healthcare Partners LLC
+- **Date:** January 1, 2024
+- **Services Provided:**
+  1. Document Processing Platform Access
+  2. 24/7 Technical Support
+  3. Monthly Data Analytics Reports
+  4. Compliance Monitoring
+- **Duration:** 12 months
+- **Financial Details:**
+  - **Monthly Fee:** $15,000
+  - **Total Contract Value:** $180,000
+- **Termination Clause:** Either party may terminate the agreement with 60 days written notice.
 
 INTENT: summarization
-TOOLS USED: document_search, document_reader
-SOURCES: CON-001
-
-> Summary of Contracts:
->
-> CON-001 — Service Agreement (DocDacity Solutions Inc. & Healthcare Partners LLC)
-> • Duration: 12 months starting January 1, 2024
-> • Monthly fee: $15,000 | Total contract value: $180,000
-> • Services: Document processing platform, 24/7 support, analytics reports,
->   compliance monitoring
-> • Termination: 60 days written notice by either party
->
-> Key Points:
-> - 1 active contract found
-> - Total committed value: $180,000
-> - Healthcare sector client
-
-CONVERSATION SUMMARY: User requested a summary of all contracts.
-  One contract found: CON-001 with Healthcare Partners LLC, valued at $180,000.
+TOOLS USED: document_reader, document_search, document_reader
+CONVERSATION SUMMARY: The payment terms on invoice INV-001 are "Net 30 days."
 ```
 
 ---
@@ -157,21 +152,16 @@ CONVERSATION SUMMARY: User requested a summary of all contracts.
 ### Example 3 — Calculation: Sum invoice totals
 
 ```
-Enter Message: Calculate the sum of all invoice totals.
+Enter Message: calculate the sum of all invoice totals
+
+The sum of all invoice totals is $303,800.
 
 INTENT: calculation
-TOOLS USED: document_search, document_reader, calculator
-SOURCES: INV-001, INV-002, INV-003
-
-> I retrieved all three invoices and used the calculator for each step.
->
-> INV-001 (Acme Corporation):    $22,000   (subtotal $20,000 + 10% tax)
-> INV-002 (TechStart Inc.):      $69,300   (after discount and tax)
-> INV-003 (Global Corp):        $214,500   (subtotal $195,000 + 10% tax)
->
-> Expression: 22000 + 69300 + 214500
-> Total: $305,800
-
-CONVERSATION SUMMARY: User asked for the sum of all invoice totals.
-  Three invoices found; combined total is $305,800.
+TOOLS USED: document_reader, document_search, document_reader, document_reader,
+            document_search, document_reader, document_reader, calculator
+CONVERSATION SUMMARY: The user inquired about the payment terms on invoice INV-001,
+  which were found to be "Net 30 days." They also requested a summary of all contracts,
+  leading to the retrieval of contract CON-001, a service agreement between DocDacity
+  Solutions Inc. and Healthcare Partners LLC, valued at $180,000 over 12 months.
+  Additionally, the sum of all invoice totals was calculated to be $303,800.
 ```
