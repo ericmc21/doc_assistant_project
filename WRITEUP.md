@@ -65,7 +65,7 @@ On the next turn, `workflow.get_state(config)` returns the previous turn's final
 
 ### Rolling summary: `update_memory`
 
-Rather than passing the full message list every time, `update_memory` (`agent.py:214`) asks the LLM to produce an `UpdateMemoryResponse` — a short summary string plus a list of referenced document IDs. This gets stored back into `conversation_summary` and shows up in the CLI as "CONVERSATION SUMMARY." I chose this approach to keep context window usage from growing unbounded; without it, long sessions would keep adding to the message list sent to every subsequent agent call.
+Rather than passing the full message list every time, `update_memory` (`agent.py:214`) asks the LLM to produce an `UpdateMemoryResponse` — a short summary string plus a list of referenced document IDs. This gets stored back into `conversation_summary` and shows up in the CLI as "CONVERSATION SUMMARY." This keeps context window usage from growing unbounded; without it, long sessions would keep adding to the message list sent to every subsequent agent call.
 
 ### Session persistence: JSON files
 
