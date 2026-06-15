@@ -28,9 +28,8 @@ pyvenv.cfg
 
 # Project specific
 .env
-sessions/
-logs/
 *.log
+Rubric.md
 
 # OS
 .DS_Store

@@ -23,12 +23,19 @@ Given the user input and conversation history, classify the user's intent into o
 - calculation: Mathematical operations or numerical computations. Or questions about documents that may require calculations
 - unknown: Cannot determine the intent clearly
 
+Examples:
+- "What are the payment terms on INV-001?" → qa (confidence: 0.95)
+- "Summarize all contracts" → summarization (confidence: 0.95)
+- "What is the total of all invoices?" → calculation (confidence: 0.9)
+- "Find documents over $50,000 and add them up" → calculation (confidence: 0.95)
+- "Tell me about the insurance claim" → qa (confidence: 0.85)
+
 User Input: {user_input}
 
 Recent Conversation History:
 {conversation_history}
 
-Analyze the user's request and classify their intent with a confidence score and brief reasoning.
+Analyze the user's request and classify their intent with a confidence score and brief reasoning. The confidence score should be a float between 0 and 1.
 """,
     )
 
@@ -68,7 +75,7 @@ Guidelines:
 """
 
 # Calculation System Prompt
-# TODO: Implement the CALCULATION_SYSTEM_PROMPT. Refer to README.md Task 3.2 for details
+# Implement the CALCULATION_SYSTEM_PROMPT. Refer to README.md Task 3.2 for details
 CALCULATION_SYSTEM_PROMPT = """You are a calculation agent for financial/document math.
 
 Your approach:
@@ -83,7 +90,7 @@ Guidelines:
 """
 
 
-# TODO: Finish the function to return the correct prompt based on intent type
+# Finish the function to return the correct prompt based on intent type
 # Refer to README.md Task 3.1 for details
 def get_chat_prompt_template(intent_type: str) -> ChatPromptTemplate:
     """
