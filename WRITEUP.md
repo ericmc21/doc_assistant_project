@@ -22,8 +22,6 @@ classify_intent → qa_agent          ┐
 
 Each specialist node calls `invoke_react_agent` (`agent.py:71`), which creates a `create_react_agent` instance with the task-specific Pydantic schema passed as `response_format`. The agent's final answer comes back as a typed object, not free-form text.
 
-One thing worth noting: `tools_used` in the state accumulates tool calls from prior turns because `result["messages"]` from `create_react_agent` includes the full chat history passed in as input. It's a known quirk of how LangGraph's `MessagesState` merges the initial messages with newly generated ones.
-
 **Every turn ends at `update_memory`.** After any agent finishes, the graph always runs `update_memory` before stopping — the conversation summary and active document list get updated on every turn no matter which agent ran.
 
 **Tool set.** Four tools are registered in `tools.py`:
