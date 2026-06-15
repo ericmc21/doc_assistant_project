@@ -14,14 +14,16 @@ classify_intent → qa_agent          ┐
 
 **Intent classification as the entry point.** Every message passes through `classify_intent` first (`agent.py:93`). The node calls `llm.with_structured_output(UserIntent)`, forcing the model to return a typed Pydantic object with `intent_type`, `confidence`, and `reasoning`. The `should_continue` router (`agent.py:244`) reads `state["next_step"]` and branches to one of three specialist nodes. Unknown intents fall back to `qa_agent`.
 
-**Why three separate agents rather than one?** Each intent type gets its own system prompt in `prompts.py`, tuned to the task:
+**Three specialist agents, one per intent.** Each intent type gets its own system prompt in `prompts.py`, tuned to the task:
 - `QA_SYSTEM_PROMPT` — emphasizes source citation and precision.
 - `SUMMARIZATION_SYSTEM_PROMPT` — emphasizes structure and key-point extraction.
 - `CALCULATION_SYSTEM_PROMPT` — mandates use of the `calculator` tool for every arithmetic step, preventing the model from computing mentally and producing unverifiable results.
 
-Each specialist node calls `invoke_react_agent` (`agent.py:71`), which creates a `create_react_agent` instance with the task-specific Pydantic schema passed as `response_format`. This guarantees the agent's final answer is structured, not free-form text.
+Each specialist node calls `invoke_react_agent` (`agent.py:71`), which creates a `create_react_agent` instance with the task-specific Pydantic schema passed as `response_format`. The agent's final answer comes back as a typed object, not free-form text.
 
-**All paths converge at `update_memory`.** After any specialist agent completes, the graph always runs `update_memory` before ending. This ensures the conversation summary and active document list are refreshed on every turn, regardless of which path was taken.
+One thing worth noting: `tools_used` in the state accumulates tool calls from prior turns because `result["messages"]` from `create_react_agent` includes the full chat history passed in as input. It's a known quirk of how LangGraph's `MessagesState` merges the initial messages with newly generated ones.
+
+**All paths converge at `update_memory`.** After any specialist agent completes, the graph always runs `update_memory` before ending — conversation summary and active document list get refreshed on every turn, regardless of which path was taken.
 
 **Tool set.** Four tools are registered in `tools.py`:
 
@@ -64,7 +66,7 @@ On subsequent turns, `workflow.get_state(config)` returns the previous turn's fi
 
 ### Rolling summary: `update_memory`
 
-Rather than passing the raw message list indefinitely, `update_memory` (`agent.py:214`) asks the LLM to produce an `UpdateMemoryResponse`—a compact summary string plus a list of referenced document IDs. This summary is stored back into `conversation_summary` and displayed in the CLI as "CONVERSATION SUMMARY." It keeps the context window bounded as conversations grow.
+Rather than passing the raw message list indefinitely, `update_memory` (`agent.py:214`) asks the LLM to produce an `UpdateMemoryResponse`—a compact summary string plus a list of referenced document IDs. This is stored back into `conversation_summary` and displayed in the CLI as "CONVERSATION SUMMARY." I chose this approach to keep context window usage bounded; without it, long sessions would keep growing the message list sent to every subsequent agent call.
 
 ### Session persistence: JSON files
 
@@ -189,6 +191,8 @@ CONVERSATION SUMMARY: User asked for the sum of all invoice totals.
 ---
 
 ### Example 4 — Calculation: Amount filter query
+
+Note: the intent classifier routes filter queries like this to `calculation_agent` because the prompt defines `calculation` broadly as anything that "may require calculations." A pure filter with no aggregation would arguably fit better under `qa`, but the classification still works since `calculation_agent` can handle search-and-report queries fine.
 
 ```
 Enter Message: Find documents with amounts over $50,000 and tell me their total.
