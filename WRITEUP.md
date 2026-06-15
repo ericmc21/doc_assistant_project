@@ -2,7 +2,7 @@
 
 ## Architecture & Routing Decisions
 
-The assistant is built as a **LangGraph state graph** with five nodes that form a conditional pipeline per request:
+The assistant is built as a **LangGraph state graph** with five nodes that run in sequence per request:
 
 ```
 classify_intent → qa_agent          ┐
@@ -10,29 +10,32 @@ classify_intent → qa_agent          ┐
                → calculation_agent  ┘
 ```
 
-**Why LangGraph?** Each user turn requires conditional routing (which agent handles this?), tool use inside an agent, and memory that persists across turns. LangGraph's `StateGraph` makes all three explicit and composable without custom plumbing.
+**Why LangGraph?** Each user turn needs to do three things: figure out what the user wants, call the right tools, and remember what happened. LangGraph's `StateGraph` handles all three without a lot of glue code.
 
-**Intent classification as the entry point.** Every message passes through `classify_intent` first (`agent.py:93`). The node calls `llm.with_structured_output(UserIntent)`, forcing the model to return a typed Pydantic object with `intent_type`, `confidence`, and `reasoning`. The `should_continue` router (`agent.py:244`) reads `state["next_step"]` and branches to one of three specialist nodes. Unknown intents fall back to `qa_agent`.
+**Intent classification as the entry point.** Every message goes through `classify_intent` first (`agent.py:93`). It calls `llm.with_structured_output(UserIntent)` to get back a typed object with `intent_type`, `confidence`, and `reasoning`. The `should_continue` router (`agent.py:244`) reads `state["next_step"]` and sends the request to one of three agents. If the intent isn't recognized, it falls back to `qa_agent`.
 
-**Three specialist agents, one per intent.** Each intent type gets its own system prompt in `prompts.py`, tuned to the task:
-- `QA_SYSTEM_PROMPT` — emphasizes source citation and precision.
-- `SUMMARIZATION_SYSTEM_PROMPT` — emphasizes structure and key-point extraction.
-- `CALCULATION_SYSTEM_PROMPT` — mandates use of the `calculator` tool for every arithmetic step, preventing the model from computing mentally and producing unverifiable results.
+**Three agents, one per intent type.** Each intent type gets its own system prompt in `prompts.py`:
+
+- `QA_SYSTEM_PROMPT` — focused on citing sources and giving precise answers.
+- `SUMMARIZATION_SYSTEM_PROMPT` — focused on structure and pulling out key points.
+- `CALCULATION_SYSTEM_PROMPT` — tells the model to always use the `calculator` tool, never compute mentally.
 
 Each specialist node calls `invoke_react_agent` (`agent.py:71`), which creates a `create_react_agent` instance with the task-specific Pydantic schema passed as `response_format`. The agent's final answer comes back as a typed object, not free-form text.
 
-**All paths converge at `update_memory`.** After any specialist agent completes, the graph always runs `update_memory` before ending — conversation summary and active document list get refreshed on every turn, regardless of which path was taken.
+One thing worth noting: `tools_used` in the state accumulates tool calls from prior turns because `result["messages"]` from `create_react_agent` includes the full chat history passed in as input. It's a known quirk of how LangGraph's `MessagesState` merges the initial messages with newly generated ones.
+
+**Every turn ends at `update_memory`.** After any agent finishes, the graph always runs `update_memory` before stopping — the conversation summary and active document list get updated on every turn no matter which agent ran.
 
 **Tool set.** Four tools are registered in `tools.py`:
 
-| Tool | Purpose |
-|---|---|
-| `calculator` | Safe `eval()` of arithmetic expressions; required for all math |
-| `document_search` | Keyword, type, amount, and range queries over the document store |
-| `document_reader` | Fetches full content of a document by ID |
-| `document_statistics` | Aggregate counts and financial totals across the collection |
+| Tool                  | Purpose                                                          |
+| --------------------- | ---------------------------------------------------------------- |
+| `calculator`          | Safe `eval()` of arithmetic expressions; required for all math   |
+| `document_search`     | Keyword, type, amount, and range queries over the document store |
+| `document_reader`     | Gets the full content of a document by ID                        |
+| `document_statistics` | Aggregate counts and financial totals across the collection      |
 
-All tools log every invocation through `ToolLogger` to JSON files under `./logs/`.
+All tools log every call through `ToolLogger` to JSON files under `./logs/`.
 
 ---
 
@@ -42,39 +45,39 @@ All tools log every invocation through `ToolLogger` to JSON files under `./logs/
 
 `AgentState` (`agent.py:42`) is a `TypedDict` that carries all data through the graph within a single turn:
 
-| Field | Type | Role |
-|---|---|---|
-| `user_input` | `str` | Raw user message for this turn |
-| `messages` | `List[BaseMessage]` (append-only) | Full LangChain message history |
-| `intent` | `UserIntent` | Classification result from `classify_intent` |
-| `next_step` | `str` | Routing signal read by `should_continue` |
-| `conversation_summary` | `str` | Rolling LLM-generated summary of prior turns |
-| `active_documents` | `List[str]` | Document IDs referenced in the conversation |
-| `current_response` | `Dict` | Raw output from the most recent specialist agent |
-| `tools_used` | `List[str]` | Names of tools called this turn |
-| `actions_taken` | `List[str]` (accumulate) | Audit log of nodes visited; uses `operator.add` reducer so each node appends without overwriting |
+| Field                  | Type                              | Role                                                                                             |
+| ---------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `user_input`           | `str`                             | Raw user message for this turn                                                                   |
+| `messages`             | `List[BaseMessage]` (append-only) | Full LangChain message history                                                                   |
+| `intent`               | `UserIntent`                      | Classification result from `classify_intent`                                                     |
+| `next_step`            | `str`                             | Routing signal read by `should_continue`                                                         |
+| `conversation_summary` | `str`                             | Rolling summary of prior turns                                                                   |
+| `active_documents`     | `List[str]`                       | Document IDs referenced in the conversation                                                      |
+| `current_response`     | `Dict`                            | Raw output from the most recent agent                                                            |
+| `tools_used`           | `List[str]`                       | Names of tools called this turn                                                                  |
+| `actions_taken`        | `List[str]` (accumulate)          | Audit log of nodes visited; uses `operator.add` reducer so each node appends without overwriting |
 
-The `messages` field uses LangGraph's `add_messages` reducer, so nodes append new messages rather than replacing the list. The `actions_taken` field uses `operator.add` for the same reason.
+The `messages` field uses LangGraph's `add_messages` reducer, so nodes add new messages rather than replacing the list. The `actions_taken` field uses `operator.add` for the same reason.
 
 ### Cross-turn persistence: `InMemorySaver` checkpointer
 
-The workflow is compiled with `checkpointer=InMemorySaver()` (`agent.py:288`). LangGraph's checkpointer snapshots the full `AgentState` after every node execution, keyed by `thread_id`. The `thread_id` is set equal to `session_id` in the config dictionary passed to each `workflow.invoke` call (`assistant.py:122`).
+The workflow is compiled with `checkpointer=InMemorySaver()` (`agent.py:288`). LangGraph saves the full `AgentState` after every node runs, keyed by `thread_id`. The `thread_id` is set to the `session_id` in the config passed to each `workflow.invoke` call (`assistant.py:122`).
 
-On subsequent turns, `workflow.get_state(config)` returns the previous turn's final state, including accumulated `messages` and `conversation_summary`. The assistant loads these at the start of each turn (`assistant.py:96–112`) so specialist agents have full conversational context.
+On the next turn, `workflow.get_state(config)` returns the previous turn's final state, including the accumulated `messages` and `conversation_summary`. The assistant loads these at the start of each turn (`assistant.py:96–112`) so agents have the full conversation context.
 
 ### Rolling summary: `update_memory`
 
-Rather than passing the raw message list indefinitely, `update_memory` (`agent.py:214`) asks the LLM to produce an `UpdateMemoryResponse`—a compact summary string plus a list of referenced document IDs. This is stored back into `conversation_summary` and displayed in the CLI as "CONVERSATION SUMMARY." I chose this approach to keep context window usage bounded; without it, long sessions would keep growing the message list sent to every subsequent agent call.
+Rather than passing the full message list every time, `update_memory` (`agent.py:214`) asks the LLM to produce an `UpdateMemoryResponse` — a short summary string plus a list of referenced document IDs. This gets stored back into `conversation_summary` and shows up in the CLI as "CONVERSATION SUMMARY." I chose this approach to keep context window usage from growing unbounded; without it, long sessions would keep adding to the message list sent to every subsequent agent call.
 
 ### Session persistence: JSON files
 
-`DocumentAssistant` writes each session's state to `./sessions/<session_id>.json` after every turn (`assistant.py:81`). On startup a user can provide an existing `session_id` to resume from disk. This is a separate, application-level persistence layer that complements the in-memory LangGraph checkpointer.
+`DocumentAssistant` writes each session's state to `./sessions/<session_id>.json` after every turn (`assistant.py:81`). On startup a user can provide an existing `session_id` to resume from disk. This is separate from the LangGraph checkpointer — one is application-level file storage, the other is in-memory graph state.
 
 ---
 
 ## Structured Output
 
-Structured output is used in three distinct places throughout the system.
+Structured output is used in three places.
 
 ### 1. Intent classification — `llm.with_structured_output()`
 
@@ -85,27 +88,30 @@ structured_llm = llm.with_structured_output(UserIntent)
 intent = structured_llm.invoke(prompt)   # returns a UserIntent instance
 ```
 
-`UserIntent` (`schemas.py:70`) uses a `Literal` type constraint to restrict `intent_type` to exactly four valid values, and `Field(ge=0.0, le=1.0)` to enforce a valid probability range on `confidence`. Any model response that violates the schema triggers an automatic retry.
+`UserIntent` (`schemas.py:70`) uses a `Literal` type to restrict `intent_type` to four valid values, and `Field(ge=0.0, le=1.0)` to keep `confidence` in range. If the model returns something that doesn't match, it retries automatically.
 
-### 2. Specialist agent responses — `response_format` in `create_react_agent`
+### 2. Agent responses — `response_format` in `create_react_agent`
 
-Each specialist node passes a schema class to `invoke_react_agent`, which forwards it as `response_format` to `create_react_agent` (`agent.py:79`). The three schemas enforce different guarantees:
+Each agent passes a schema class to `invoke_react_agent`, which forwards it as `response_format` to `create_react_agent` (`agent.py:79`). The three schemas each enforce different things:
 
 **`AnswerResponse`** (`schemas.py:23`) — for Q&A:
-- Requires `sources: List[str]`, forcing the model to name the document IDs it used. This makes answers auditable.
-- Requires `confidence: float` so callers can surface uncertainty.
+
+- Requires `sources: List[str]`, so the model has to name which documents it used.
+- Requires `confidence: float` to surface uncertainty.
 
 **`SummarizationResponse`** (`schemas.py:35`) — for summarization:
-- Requires `key_points: List[str]`, encouraging the model to decompose findings rather than return a wall of text.
+
+- Requires `key_points: List[str]`, so the model breaks findings into a list rather than a wall of text.
 - Requires `document_ids: List[str]` to track which documents were summarized.
 
 **`CalculationResponse`** (`schemas.py:47`) — for calculations:
-- Requires `expression: str`, forcing the model to surface the formula it evaluated—not just the answer—making the result verifiable.
+
+- Requires `expression: str`, so the formula is visible, not just the answer.
 - Requires `result: float` as a typed number, not a string.
 
 ### 3. Memory update — `llm.with_structured_output(UpdateMemoryResponse)`
 
-`update_memory` uses the same `with_structured_output` pattern to extract a structured `summary` string and a `document_ids` list from the full message history (`agent.py:234`). This prevents unstructured text from being stored as the memory state.
+`update_memory` uses the same pattern to pull a structured `summary` string and a `document_ids` list out of the message history (`agent.py:234`), so the memory state is always typed rather than raw text.
 
 ---
 
