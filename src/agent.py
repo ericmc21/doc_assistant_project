@@ -35,7 +35,7 @@ from prompts import (
 )
 
 
-# TODO: The AgentState class is already implemented for you.  Study the
+# The AgentState class is already implemented for you.  Study the
 # structure to understand how state flows through the LangGraph
 # workflow.  See README.md Task 2.1 for detailed explanations of
 # each property.
@@ -210,7 +210,7 @@ def calculation_agent(state: AgentState, config: RunnableConfig) -> AgentState:
     }
 
 
-# TODO: Finish implementing the update_memory function. Refer to README.md Task 2.4
+# Finish implementing the update_memory function. Refer to README.md Task 2.4
 def update_memory(state: AgentState, config: RunnableConfig) -> AgentState:
     """
     Update conversation memory and record the action.

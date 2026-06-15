@@ -29,7 +29,7 @@ class AnswerResponse(BaseModel):
     confidence: float = Field(
         ge=0.0, le=1.0, description="Confidence score between 0 and 1"
     )
-    timestamp: datetime
+    timestamp: datetime = Field(default_factory=datetime.now)
 
 
 class SummarizationResponse(BaseModel):
