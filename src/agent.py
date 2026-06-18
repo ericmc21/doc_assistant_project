@@ -246,7 +246,7 @@ def should_continue(state: AgentState) -> str:
     return state.get("next_step", "end")
 
 
-# TODO: Complete the create_workflow function. Refer to README.md Task 2.5
+# Complete the create_workflow function. Refer to README.md Task 2.5
 def create_workflow(llm, tools):
     """
     Creates the LangGraph agents.
