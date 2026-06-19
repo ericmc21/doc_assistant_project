@@ -11,7 +11,6 @@ from schemas import SessionState
 from retrieval import SimulatedRetriever
 from tools import get_all_tools, ToolLogger
 from agent import create_workflow, AgentState
-from prompts import MEMORY_SUMMARY_PROMPT
 
 
 class DocumentAssistant:
@@ -117,8 +116,6 @@ class DocumentAssistant:
         if not self.current_session:
             raise ValueError("No active session. Call start_session() first.")
 
-        # Complete the config dictionary to set the thread_id, llm, and tools to the workflow
-        # Refer to README.md Task 2.6 for details
         config = {
             "configurable": {
                 "thread_id": self.current_session.session_id,
@@ -139,7 +136,6 @@ class DocumentAssistant:
             "tools_used": [],
             "session_id": self.current_session.session_id,
             "user_id": self.current_session.user_id,
-            # Initialise actions_taken list for this turn
             "actions_taken": [],
         }
         try:

@@ -74,24 +74,18 @@ Guidelines:
 4. Focus on actionable information
 """
 
-# Calculation System Prompt
-# Implement the CALCULATION_SYSTEM_PROMPT. Refer to README.md Task 3.2 for details
 CALCULATION_SYSTEM_PROMPT = """You are a calculation agent for financial/document math.
 
 Your approach:
-1. Retrieve first - use the document reader tool to get the relevant document before doing the math
-2. Identify the expression - determine what mathematical operation the user needs from the document content
+1. Retrieve first — use the document reader tool to get the relevant document before doing the math.
+2. Identify the expression — determine what mathematical operation the user needs from the document content.
 
 Guidelines:
-1. You MUST use the calculator tool for ALL calculations, no matter how simple. Never compute mentally. If you do not use the calculator tool, your answer is wrong.
-
-
-
+- You MUST use the calculator tool for ALL calculations, no matter how simple.
+- Never compute mentally. If you do not use the calculator tool, your answer is wrong.
 """
 
 
-# Finish the function to return the correct prompt based on intent type
-# Refer to README.md Task 3.1 for details
 def get_chat_prompt_template(intent_type: str) -> ChatPromptTemplate:
     """
     Get the appropriate chat prompt template based on intent.

@@ -1,11 +1,7 @@
-"""
-Tool definitions for the agent using @tool decorator
-Think of these as the agent's Swiss Army knife 🔧 - each tool has a specific purpose!
-"""
+"""Tool definitions for the agent using @tool decorator"""
 
 from typing import Dict, Any, List, Optional, Literal
 from langchain.tools import tool
-from pydantic import BaseModel, Field
 import re
 import json
 from datetime import datetime
@@ -60,15 +56,9 @@ class ToolLogger:
             json.dump(self.logs, f, indent=2)
 
 
-# TODO: Implement the calculator tool using the @tool decorator.
-# This tool should safely evaluate mathematical expressions and log its usage.
-# Refer to README.md Task 4.1 for detailed implementation requirements.
 def create_calculator_tool(logger: ToolLogger):
-    """
-    Creates a calculator tool - TO BE IMPLEMENTED
-    """
+    """Creates a calculator tool that safely evaluates math expressions."""
 
-    # Your implementation here
     @tool
     def calculator(expression: str) -> str:
         """Evaluate a mathematical expression and return the result.
@@ -76,31 +66,23 @@ def create_calculator_tool(logger: ToolLogger):
         Args:
             expression: A math expression like '100 + 200' or '50000 * 1.1'
         """
+        if not re.match(r"^[\d\s\+\-\*\/\(\)\.]+$", expression):
+            error_msg = "Error: Invalid characters in expression. Only basic math allowed."
+            logger.log_tool_use(
+                "calculator", {"expression": expression}, {"error": error_msg}
+            )
+            return error_msg
+
         try:
-            # 1 validate epxression for safety
-            if not re.match(r"^[\d\s\+\-\*\/\(\)\.]+$", expression):
-                return (
-                    "Error: Invalid characters in expression. Only basic math allowed."
-                )
-
-            # 2 Evaluates the expression using Python's eval() funtion
             result = eval(expression)
-
-            # 3 logs the tool usage with ToolLogger
             logger.log_tool_use(
                 "calculator", {"expression": expression}, {"result": result}
             )
-
-            # 4 returns a formatted result string
             return f"Result: {expression} = {result}"
-
-            # 5 Handles errors gracefully
         except Exception as e:
             error_msg = f"Error calculating: {str(e)}"
             logger.log_tool_use(
-                "calculator",
-                {"expression": expression},
-                {"error": error_msg},
+                "calculator", {"expression": expression}, {"error": error_msg}
             )
             return error_msg
 
