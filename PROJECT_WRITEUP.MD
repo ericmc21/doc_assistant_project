@@ -2,44 +2,38 @@
 
 ## Architecture and Routing Decisions
 
-The Document Assistant was built using a **LangGraph state graph** with five notes that run in sequence per request:
+The Document Assistant was built using a **LangGraph state graph** with five nodes that run in sequence per request:
 
 ```
 classify_intent -> [qa_agent, summarization_agent, calculation_agent] -> update_memory -> END
-
 ```
 
-Why LangGraph? - Because it is a LanGraph course and each user turn needs 3 components
+Why LangGraph? Because this is a LangGraph course, and each user turn needs 3 components:
 
 1. Determine the intent
 2. Call the right agent
 3. Remember what happened on the turn
 
-LanGraph's StateGraph has a lot of this built-in with workflow.add_node, workflow.set_entry_point, workflow.add_conditional_edges.
+LangGraph's StateGraph has a lot of this built in, via `workflow.add_node`, `workflow.set_entry_point`, and `workflow.add_conditional_edges`.
 
-Intent classification as the entry point. Every message must got through `classify_intent` function first to determine which agent should be called or named as the next_step. `classify_intent` uses llm.with_structured_output(UserIntent) to get an object containing the intent_type, confidence, and reasoning. The should_continue router reads from state state["next_step"] to get the next agent to send a request to. If no intent is recognized, it falls to qa_agent.
+Intent classification is the entry point. Every message must go through the `classify_intent` function first to determine which agent should be called, named as the `next_step`. `classify_intent` uses `llm.with_structured_output(UserIntent)` to get an object containing the `intent_type`, `confidence`, and `reasoning`. The `should_continue` router reads `state["next_step"]` to determine which agent to send the request to. If no intent is recognized, it falls back to `qa_agent`.
 
-**Three agents, one per intent type.** Each intent gets its own system prompt from prompts.py`
+**Three agents, one per intent type.** Each intent gets its own system prompt from `prompts.py`:
 
-- `QA_SYSTEM_PROMPT` - search and read documents, cite sources and give precise answers.
-- `SUMMARIZATION_SYSTEM_PROMPT` - extract key info, organize summaries, include document ID in summary, keep summaries short but complete
-- `CALCULATION_SYSTEM_PROMPT` - User document reader tool to get the right document then determine the calculation that the user needs.
+- `QA_SYSTEM_PROMPT` — search and read documents, cite sources, and give precise answers.
+- `SUMMARIZATION_SYSTEM_PROMPT` — extract key info, organize summaries, include document ID in summary, keep summaries short but complete.
+- `CALCULATION_SYSTEM_PROMPT` — use the document reader tool to get the right document, then determine the calculation the user needs.
 
-Each agent runs via `invoke_react_agent`, which creates a `create_react_agent` instance with the task-specific Pydantic schema passed as `response_format`. The agent's final answer comes back as a typed object, not free-form text. **Note** create_react_agent is deprecated. I just left it as is because it was part of the sample code from the workspace.
+Each agent runs via `invoke_react_agent`, which creates a `create_react_agent` instance with the task-specific Pydantic schema passed as `response_format`. The agent's final answer comes back as a typed object, not free-form text. **Note:** `create_react_agent` is deprecated. I left it as is since it was part of the sample code from the workspace.
 
-\*\*Every turn ends with `update_memory`. so that the conversation summary and active document list get updated on every turn.
+**Every turn ends with `update_memory`,** so that the conversation summary and active document list get updated on every turn.
 
 ## State & Memory
 
 ### Turn state: `AgentState`
 
-`AgentState` is a `TypeDict` that carries all data through the graph within a single turn:
+`AgentState` is a `TypedDict` that carries all data through the graph within a single turn:
 
-You have a trailing space issue — Markdown requires **two spaces** at the end of a line for a line break, or a blank line between lines for paragraph breaks.
-
-Your lines probably have inconsistent or no trailing spaces. Easiest fix: use a blank line between each row, or better yet, just make this a proper Markdown table:
-
-```markdown
 | Field                  | Type                | Description                          |
 | ---------------------- | ------------------- | ------------------------------------ |
 | `user_input`           | `str`               | Raw user message for this turn       |
@@ -51,35 +45,34 @@ Your lines probably have inconsistent or no trailing spaces. Easiest fix: use a 
 | `current_response`     | `Dict`              | Output from the most recent agent    |
 | `tools_used`           | `List[str]`         | Names of tools used during the turn  |
 | `actions_taken`        | `List[str]`         | Log of nodes visited during the turn |
-```
 
 The `messages` field uses LangGraph's `add_messages` reducer, so new messages are appended. The `actions_taken` field uses `operator.add` for the same reason.
 
 ## Turn persistence: `InMemorySaver` checkpointer
 
-The workflow is compiled with `checkpointer=InMemorySaver()`. LanGraph saves the full `AgentState` after every node runs. Each node run is identified by thread_id, which is set to the session_id in the config passed into the workflow.
+The workflow is compiled with `checkpointer=InMemorySaver()`. LangGraph saves the full `AgentState` after every node runs. Each node run is identified by `thread_id`, which is set to the `session_id` in the config passed into the workflow.
 
-On the next turn, the previous turn's final state is available with all messages and the conversation_summary. This gives agents the full context of the conversation.
+On the next turn, the previous turn's final state is available with all messages and the `conversation_summary`. This gives agents the full context of the conversation.
 
-## Memory: update_memory
+## Memory: `update_memory`
 
-The `update_memory` function has the LLM summarize the full message and return an UpdateMemoryResponse. The UpdateMemoryResponse includes a short string and list of the document IDs references. This gets stored back to `conversation_summary`. This approach keeps the context window manageable for subsequent agent calls.
+The `update_memory` function has the LLM summarize the full message history and return an `UpdateMemoryResponse`. The `UpdateMemoryResponse` includes a short summary string and a list of referenced document IDs. This gets stored back to `conversation_summary`. This approach keeps the context window manageable for subsequent agent calls.
 
 ## Persistence: JSON files
 
-`DocumentAssistant` writes each session state log to `./sessions/{session_id}.json` after every turn. Whe the flow starts the user can provide an existing `session_id` to resume the flow from disk. This is separate from `InMemorySaver`, which is in memory graph state.
+`DocumentAssistant` writes each session's state log to `./sessions/{session_id}.json` after every turn. When the flow starts, the user can provide an existing `session_id` to resume the flow from disk. This is separate from `InMemorySaver`, which holds in-memory graph state.
 
 ## Structured output
 
-Structured output is used so that the LLM returns results according to the desired schema. It is used in three different cases
+Structured output is used so that the LLM returns results according to the desired schema. It's used in three cases:
 
 ### 1. Intent Classification
 
-In `classify_intent`, the LLM must used the `UserIntent` schema.
+In `classify_intent`, the LLM must use the `UserIntent` schema.
 
 ### 2. Agent responses
 
-Each agent response requires its own response that is passed into `create_react_agent` as `response_format`
+Each agent's response is passed into `create_react_agent` as `response_format`:
 
 **`AnswerResponse`** — for Q&A:
 
@@ -157,5 +150,5 @@ CONVERSATION SUMMARY: The user inquired about the payment terms on invoice INV-0
   which were found to be "Net 30 days." They also requested a summary of all contracts,
   leading to the retrieval of contract CON-001, a service agreement between DocDacity
   Solutions Inc. and Healthcare Partners LLC, valued at $180,000 over 12 months.
-  Additionally, the sum of all invoice totals was calculated to be $303,800.
+  Additionally, the sum of all invoice totals was calculated to be $305,800.
 ```
