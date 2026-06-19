@@ -65,7 +65,7 @@ On the next turn, the previous turn's final state is available with all messages
 
 The `update_memory` function has the LLM summarize the full message and return an UpdateMemoryResponse. The UpdateMemoryResponse includes a short string and list of the document IDs references. This gets stored back to `conversation_summary`. This approach keeps the context window manageable for subsequent agent calls.
 
-## Persistance: JSON files
+## Persistence: JSON files
 
 `DocumentAssistant` writes each session state log to `./sessions/{session_id}.json` after every turn. Whe the flow starts the user can provide an existing `session_id` to resume the flow from disk. This is separate from `InMemorySaver`, which is in memory graph state.
 
@@ -75,7 +75,7 @@ Structured output is used so that the LLM returns results according to the desir
 
 ### 1. Intent Classification
 
-In `classify_intent`, the LLM must used teh `UserIntent` schema.
+In `classify_intent`, the LLM must used the `UserIntent` schema.
 
 ### 2. Agent responses
 
@@ -138,8 +138,8 @@ Enter Message: summarize all contracts in the system
 - **Termination Clause:** Either party may terminate the agreement with 60 days written notice.
 
 INTENT: summarization
-TOOLS USED: document_reader, document_search, document_reader
-CONVERSATION SUMMARY: The payment terms on invoice INV-001 are "Net 30 days."
+TOOLS USED: document_search, document_reader
+CONVERSATION SUMMARY: The conversation involved a request to summarize all contracts in the system. One contract was found and summarized:
 ```
 
 ### Calculation: Sum invoice totals
